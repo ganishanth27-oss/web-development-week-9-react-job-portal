@@ -1,3 +1,4 @@
+
 import {
   BrowserRouter,
   Routes,
@@ -13,13 +14,16 @@ import ApplicationForm from "./pages/ApplicationForm";
 import Jobs from "./pages/Jobs";
 import MyApplications from "./pages/MyApplications";
 import Profile from "./pages/Profile";
+import JobDetails from "./pages/JobDetails";
+import Dashboard from "./pages/Dashboard";
+
 import { AuthProvider } from "./context/AuthContext";
 
 import logo from "./assets/dg-logo.png";
 import "./App.css";
 
 // =========================================================
-// HOME PAGE (Existing Design Preserved)
+// HOME PAGE
 // =========================================================
 
 function Home() {
@@ -128,19 +132,18 @@ function Home() {
 }
 
 // =========================================================
-// CONTACT PAGE (Existing Design Preserved)
+// CONTACT PAGE
 // =========================================================
 
 function Contact() {
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = (event) => {
+    event.preventDefault();
     alert("Thank you! Your message has been submitted.");
   };
 
   return (
     <section className="contact-page">
       <div className="contact-container">
-        {/* CONTACT HEADER */}
         <div className="contact-header">
           <p className="page-label">GET IN TOUCH</p>
 
@@ -196,6 +199,7 @@ function Contact() {
               <label htmlFor="contact-name">Your Name</label>
               <input
                 id="contact-name"
+                name="name"
                 type="text"
                 placeholder="Enter your name"
                 autoComplete="name"
@@ -209,6 +213,7 @@ function Contact() {
               </label>
               <input
                 id="contact-email"
+                name="email"
                 type="email"
                 placeholder="Enter your email"
                 autoComplete="email"
@@ -220,6 +225,7 @@ function Contact() {
               <label htmlFor="contact-subject">Subject</label>
               <input
                 id="contact-subject"
+                name="subject"
                 type="text"
                 placeholder="Enter subject"
                 required
@@ -230,7 +236,8 @@ function Contact() {
               <label htmlFor="contact-message">Message</label>
               <textarea
                 id="contact-message"
-                rows="5"
+                name="message"
+                rows={5}
                 placeholder="Write your message..."
                 required
               />
@@ -276,13 +283,73 @@ function App() {
 
         <main>
           <Routes>
+            {/* Home */}
             <Route path="/" element={<Home />} />
+
+            {/* Job listings */}
             <Route path="/jobs" element={<Jobs />} />
-            <Route path="/my-applications" element={<MyApplications />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/apply" element={<ApplicationForm />} />
+
+            {/* Individual job details */}
+            <Route
+              path="/jobs/:id"
+              element={<JobDetails />}
+            />
+
+            {/* Candidate dashboard */}
+            <Route
+              path="/dashboard"
+              element={<Dashboard />}
+            />
+
+            {/* Candidate applications */}
+            <Route
+              path="/my-applications"
+              element={<MyApplications />}
+            />
+
+            {/* Applications route alias */}
+            <Route
+              path="/applications"
+              element={<MyApplications />}
+            />
+
+            {/* Candidate profile */}
+            <Route
+              path="/profile"
+              element={<Profile />}
+            />
+
+            {/* Contact */}
+            <Route
+              path="/contact"
+              element={<Contact />}
+            />
+
+            {/* Login and registration */}
+            <Route
+              path="/login"
+              element={<LoginPage />}
+            />
+
+            {/* Application form */}
+            <Route
+              path="/apply"
+              element={<ApplicationForm />}
+            />
+
+            {/* Unknown URLs */}
+            <Route
+              path="*"
+              element={
+                <section className="page-container">
+                  <h1>Page not found</h1>
+                  <p>
+                    The page you're looking for doesn't exist.
+                  </p>
+                  <Link to="/">Return Home</Link>
+                </section>
+              }
+            />
           </Routes>
         </main>
 

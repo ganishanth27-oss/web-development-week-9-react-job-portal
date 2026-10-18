@@ -66,7 +66,16 @@ function JobCard({
         <span className="job-type">{type}</span>
       </div>
 
-      <h3>{title}</h3>
+      <h3>
+  <button
+    type="button"
+    className="job-title-link"
+    onClick={() => navigate(`/jobs/${jobId}`)}
+    disabled={!jobId}
+  >
+    {title}
+  </button>
+</h3>
       <p className="job-company">{company}</p>
 
       <div className="job-details">
