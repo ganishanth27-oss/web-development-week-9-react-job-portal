@@ -4,11 +4,15 @@ import {
   Routes,
   Route,
   Link,
+  Navigate,
+  Outlet,
   useLocation,
 } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import ProtectedRoute from "./components/ProtectedRoute";
+
 import Auth from "./pages/Auth";
 import ApplicationForm from "./pages/ApplicationForm";
 import Jobs from "./pages/Jobs";
@@ -17,7 +21,7 @@ import Profile from "./pages/Profile";
 import JobDetails from "./pages/JobDetails";
 import Dashboard from "./pages/Dashboard";
 
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 
 import logo from "./assets/dg-logo.png";
 import "./App.css";
@@ -29,7 +33,6 @@ import "./App.css";
 function Home() {
   return (
     <>
-      {/* HERO SECTION */}
       <section className="hero">
         <img
           src={logo}
@@ -64,7 +67,6 @@ function Home() {
         </div>
       </section>
 
-      {/* WHY SECTION */}
       <section id="why-us" className="why-section">
         <div className="section-heading">
           <p>WHY DG INTERNS HUB</p>
@@ -105,7 +107,6 @@ function Home() {
         </div>
       </section>
 
-      {/* STATS SECTION */}
       <section className="stats-section">
         <div>
           <strong>100+</strong>
@@ -156,7 +157,6 @@ function Contact() {
         </div>
 
         <div className="contact-content">
-          {/* CONTACT INFORMATION */}
           <div className="contact-info">
             <h2>Let's connect</h2>
 
@@ -190,7 +190,6 @@ function Contact() {
             </div>
           </div>
 
-          {/* CONTACT FORM */}
           <form
             className="contact-form"
             onSubmit={handleSubmit}
@@ -257,7 +256,7 @@ function Contact() {
 }
 
 // =========================================================
-// LOGIN REDIRECT HANDLER
+// LOGIN PAGE
 // =========================================================
 
 function LoginPage() {
@@ -272,88 +271,98 @@ function LoginPage() {
 }
 
 // =========================================================
-// MAIN APP ROUTING & PROVIDER
+// AUTHENTICATED HOME REDIRECT
+// =========================================================
+
+function PublicOnlyRoute() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <section className="page-container" aria-live="polite">
+        <p>Checking your login session...</p>
+      </section>
+    );
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <Outlet />;
+}
+
+// =========================================================
+// MAIN APP ROUTING
+// =========================================================
+
+function AppRoutes() {
+  return (
+    <>
+      <Navbar />
+
+      <main>
+        <Routes>
+          {/* Public pages */}
+          <Route path="/" element={<Home />} />
+          <Route path="/jobs" element={<Jobs />} />
+          <Route path="/jobs/:id" element={<JobDetails />} />
+          <Route path="/contact" element={<Contact />} />
+
+          {/* Login and registration */}
+          <Route element={<PublicOnlyRoute />}>
+            <Route path="/login" element={<LoginPage />} />
+          </Route>
+
+          {/* Protected candidate pages */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+
+            <Route
+              path="/my-applications"
+              element={<MyApplications />}
+            />
+
+            <Route
+              path="/applications"
+              element={<MyApplications />}
+            />
+
+            <Route path="/profile" element={<Profile />} />
+
+            <Route path="/apply" element={<ApplicationForm />} />
+          </Route>
+
+          {/* Unknown URLs */}
+          <Route
+            path="*"
+            element={
+              <section className="page-container">
+                <h1>Page not found</h1>
+                <p>
+                  The page you're looking for doesn't exist.
+                </p>
+                <Link to="/">Return Home</Link>
+              </section>
+            }
+          />
+        </Routes>
+      </main>
+
+      <Footer />
+    </>
+  );
+}
+
+// =========================================================
+// APP PROVIDERS
 // =========================================================
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Navbar />
-
-        <main>
-          <Routes>
-            {/* Home */}
-            <Route path="/" element={<Home />} />
-
-            {/* Job listings */}
-            <Route path="/jobs" element={<Jobs />} />
-
-            {/* Individual job details */}
-            <Route
-              path="/jobs/:id"
-              element={<JobDetails />}
-            />
-
-            {/* Candidate dashboard */}
-            <Route
-              path="/dashboard"
-              element={<Dashboard />}
-            />
-
-            {/* Candidate applications */}
-            <Route
-              path="/my-applications"
-              element={<MyApplications />}
-            />
-
-            {/* Applications route alias */}
-            <Route
-              path="/applications"
-              element={<MyApplications />}
-            />
-
-            {/* Candidate profile */}
-            <Route
-              path="/profile"
-              element={<Profile />}
-            />
-
-            {/* Contact */}
-            <Route
-              path="/contact"
-              element={<Contact />}
-            />
-
-            {/* Login and registration */}
-            <Route
-              path="/login"
-              element={<LoginPage />}
-            />
-
-            {/* Application form */}
-            <Route
-              path="/apply"
-              element={<ApplicationForm />}
-            />
-
-            {/* Unknown URLs */}
-            <Route
-              path="*"
-              element={
-                <section className="page-container">
-                  <h1>Page not found</h1>
-                  <p>
-                    The page you're looking for doesn't exist.
-                  </p>
-                  <Link to="/">Return Home</Link>
-                </section>
-              }
-            />
-          </Routes>
-        </main>
-
-        <Footer />
+        <AppRoutes />
       </BrowserRouter>
     </AuthProvider>
   );

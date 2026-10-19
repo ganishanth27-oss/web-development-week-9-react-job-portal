@@ -2,11 +2,17 @@ import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getMyApplications } from "../api";
 import { useAuth } from "../context/AuthContext";
+import StatusBadge from "../components/StatusBadge";
+import LoadingSpinner from "../components/LoadingSpinner";
+import ErrorMessage from "../components/ErrorMessage";
+import EmptyState from "../components/EmptyState";
+import ApplicationModal from "../components/ApplicationModal";
 
 export default function MyApplications() {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedApp, setSelectedApp] = useState(null);
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -40,7 +46,7 @@ export default function MyApplications() {
         navigate("/login", { state: { from: "/my-applications" } });
         return;
       }
-      setError(err.message || "Failed to load your applications.");
+      setError(err.message || "Unable to load applications. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -60,10 +66,7 @@ export default function MyApplications() {
   if (authLoading) {
     return (
       <section className="applications-page">
-        <div className="jobs-loading-state">
-          <div className="spinner"></div>
-          <p>Verifying authentication...</p>
-        </div>
+        <LoadingSpinner message="Verifying authentication..." fullHeight />
       </section>
     );
   }
@@ -71,7 +74,7 @@ export default function MyApplications() {
   return (
     <div className="my-applications-page">
       <section className="jobs-hero">
-        <p className="page-label">DASHBOARD</p>
+        <p className="page-label">CANDIDATE PORTAL</p>
         <h1>My Applications</h1>
         <p>Track the progress and status of your submitted internship applications.</p>
       </section>
@@ -79,58 +82,50 @@ export default function MyApplications() {
       <section className="applications-container">
         {/* LOADING STATE */}
         {loading && (
-          <div className="jobs-loading-state">
-            <div className="spinner"></div>
-            <p>Loading your applications from server...</p>
-          </div>
+          <LoadingSpinner message="Loading your applications..." />
         )}
 
         {/* ERROR STATE */}
         {!loading && error && (
-          <div className="jobs-error-state">
-            <p className="error-title">⚠️ Error loading applications</p>
-            <p className="error-message">{error}</p>
-            <button
-              type="button"
-              className="retry-button"
-              onClick={fetchApplications}
-            >
-              Try Again ↻
-            </button>
-          </div>
+          <ErrorMessage
+            title="Applications Error"
+            message={error}
+            onRetry={fetchApplications}
+            retryLabel="Retry"
+          />
         )}
 
         {/* EMPTY STATE */}
         {!loading && !error && applications.length === 0 && (
-          <div className="no-applications-card">
-            <div className="empty-icon">📂</div>
-            <h3>No applications submitted yet</h3>
-            <p>You haven't applied to any internships yet. Explore open roles today!</p>
-            <Link to="/jobs" className="primary-button">
-              Explore Internships →
-            </Link>
-          </div>
+          <EmptyState
+            icon="📂"
+            title="No applications submitted yet"
+            message="You haven't applied to any internships yet. Explore open roles and take the next step in your career!"
+            actionText="Browse Jobs →"
+            actionLink="/jobs"
+          />
         )}
 
         {/* APPLICATIONS LIST / TABLE */}
         {!loading && !error && applications.length > 0 && (
           <div className="applications-list-wrapper">
             <div className="applications-meta-header">
-              <span>Total Applications: <strong>{pagination.totalCount || applications.length}</strong></span>
+              <span>
+                Total Applications:{" "}
+                <strong>{pagination.totalCount || applications.length}</strong>
+              </span>
             </div>
 
             <div className="applications-cards-grid">
               {applications.map((app) => {
                 const appId = app._id || app.id;
                 const formattedDate = app.createdAt
-                  ? new Date(app.createdAt).toLocaleDateString(undefined, {
+                  ? new Date(app.createdAt).toLocaleDateString("en-IN", {
                       year: "numeric",
                       month: "short",
                       day: "numeric",
                     })
                   : "Recently";
-
-                const statusClass = (app.status || "pending").toLowerCase();
 
                 return (
                   <div key={appId} className="application-record-card">
@@ -139,9 +134,7 @@ export default function MyApplications() {
                         <h3>{app.jobTitle}</h3>
                         <p className="app-card-company">{app.company}</p>
                       </div>
-                      <span className={`status-badge status-${statusClass}`}>
-                        {app.status || "Pending"}
-                      </span>
+                      <StatusBadge status={app.status} />
                     </div>
 
                     <div className="app-card-meta">
@@ -150,18 +143,26 @@ export default function MyApplications() {
                       {app.category && <span>💼 {app.category}</span>}
                     </div>
 
-                    {app.resumeUrl && (
-                      <div className="app-card-footer">
+                    <div className="app-card-footer">
+                      <button
+                        type="button"
+                        className="app-secondary-button-sm"
+                        onClick={() => setSelectedApp(app)}
+                      >
+                        View Details
+                      </button>
+
+                      {app.resumeUrl && (
                         <a
                           href={app.resumeUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="resume-link"
                         >
-                          View Submitted Resume ↗
+                          View Resume ↗
                         </a>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -196,7 +197,9 @@ export default function MyApplications() {
                   type="button"
                   className="page-nav-button"
                   disabled={!pagination.hasNextPage}
-                  onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))
+                  }
                 >
                   Next →
                 </button>
@@ -205,6 +208,14 @@ export default function MyApplications() {
           </div>
         )}
       </section>
+
+      {/* VIEW DETAILS MODAL */}
+      {selectedApp && (
+        <ApplicationModal
+          application={selectedApp}
+          onClose={() => setSelectedApp(null)}
+        />
+      )}
     </div>
   );
 }

@@ -57,7 +57,7 @@ function Jobs() {
         setJobs([]);
       }
     } catch (err) {
-      setError(err.message || "Failed to load jobs from server.");
+      setError("Unable to load jobs. Please try again.");
       setJobs([]);
     } finally {
       setLoading(false);
@@ -206,23 +206,23 @@ function Jobs() {
 
         {/* LOADING STATE */}
         {loading && (
-          <div className="jobs-loading-state">
-            <div className="spinner"></div>
-            <p>Loading opportunities from server...</p>
+          <div className="jobs-loading-state" role="status" aria-live="polite">
+            <div className="spinner" aria-hidden="true"></div>
+            <p>Loading jobs...</p>
           </div>
         )}
 
         {/* ERROR STATE */}
         {!loading && error && (
-          <div className="jobs-error-state">
-            <p className="error-title">⚠️ Error loading opportunities</p>
+          <div className="jobs-error-state" role="alert">
+            <p className="error-title">⚠️ Error</p>
             <p className="error-message">{error}</p>
             <button
               type="button"
               className="retry-button"
               onClick={fetchJobsList}
             >
-              Try Again ↻
+              Retry ↻
             </button>
           </div>
         )}
@@ -230,15 +230,15 @@ function Jobs() {
         {/* EMPTY STATE */}
         {!loading && !error && jobs.length === 0 && (
           <div className="no-jobs">
-            <div>🔍</div>
-            <h3>No opportunities found</h3>
-            <p>Try adjusting your search query, location, or type filters.</p>
+            <div aria-hidden="true">🔍</div>
+            <h3>No jobs found.</h3>
+            <p>Try adjusting your search query, location, or filters to find opportunities.</p>
             <button
               type="button"
               className="clear-filter-action-btn"
               onClick={handleResetFilters}
             >
-              Reset Filters
+              Clear Filters
             </button>
           </div>
         )}

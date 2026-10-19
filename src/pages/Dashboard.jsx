@@ -1,38 +1,84 @@
-
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getMyApplications } from "../api";
 import { useAuth } from "../context/AuthContext";
 
-const STATUS_STYLES = {
-  Pending: "status-pending",
-  Reviewed: "status-reviewed",
-  Accepted: "status-accepted",
-  Rejected: "status-rejected",
-};
+import DashboardStatCard from "../components/DashboardStatCard";
+import StatusBadge from "../components/StatusBadge";
+import LoadingSpinner from "../components/LoadingSpinner";
+import ErrorMessage from "../components/ErrorMessage";
+import EmptyState from "../components/EmptyState";
+import ApplicationModal from "../components/ApplicationModal";
 
 const EMPTY_STATS = {
   total: 0,
   pending: 0,
-  reviewed: 0,
-  accepted: 0,
+  shortlisted: 0,
+  selected: 0,
   rejected: 0,
 };
 
 function formatDate(date) {
-  if (!date) return "Date unavailable";
+  if (!date) return "Recently";
 
   const parsedDate = new Date(date);
 
   if (Number.isNaN(parsedDate.getTime())) {
-    return "Date unavailable";
+    return "Recently";
   }
 
   return parsedDate.toLocaleDateString("en-IN", {
-    day: "numeric",
+    day: "2-digit",
     month: "short",
     year: "numeric",
   });
+}
+
+/**
+ * Calculates internally consistent statistics across the candidate's applications.
+ * Status Grouping:
+ * - Pending: "Pending", "Applied"
+ * - Shortlisted: "Shortlisted", "Reviewed", "Under Review"
+ * - Selected: "Selected", "Accepted"
+ * - Rejected: "Rejected"
+ * - Total: Sum of all applications
+ */
+function parseStats(statsFromApi, applicationsList = []) {
+  if (statsFromApi && typeof statsFromApi.total === "number") {
+    const pending = Number(statsFromApi.pending) || 0;
+    const shortlisted =
+      Number(statsFromApi.shortlisted ?? statsFromApi.reviewed) || 0;
+    const selected =
+      Number(statsFromApi.selected ?? statsFromApi.accepted) || 0;
+    const rejected = Number(statsFromApi.rejected) || 0;
+    const total =
+      Number(statsFromApi.total) ||
+      pending + shortlisted + selected + rejected;
+
+    return { total, pending, shortlisted, selected, rejected };
+  }
+
+  // Fallback: derive directly from applications array
+  const counts = { ...EMPTY_STATS, total: applicationsList.length };
+  for (const app of applicationsList) {
+    const s = String(app.status || "").trim().toLowerCase();
+    if (s === "pending" || s === "applied") {
+      counts.pending += 1;
+    } else if (
+      s === "shortlisted" ||
+      s === "reviewed" ||
+      s === "under review"
+    ) {
+      counts.shortlisted += 1;
+    } else if (s === "selected" || s === "accepted") {
+      counts.selected += 1;
+    } else if (s === "rejected") {
+      counts.rejected += 1;
+    } else {
+      counts.pending += 1;
+    }
+  }
+  return counts;
 }
 
 export default function Dashboard() {
@@ -43,6 +89,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedApp, setSelectedApp] = useState(null);
 
   const fetchDashboard = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -58,32 +105,13 @@ export default function Dashboard() {
 
       if (!response?.success) {
         throw new Error(
-          response?.message || "Unable to load your dashboard."
+          response?.message || "Unable to load dashboard data. Please try again."
         );
       }
 
-      setApplications(response.applications || []);
-
-      // Use complete backend statistics, not just the five recent records.
-      if (response.stats) {
-        setStats({
-          total: Number(response.stats.total) || 0,
-          pending: Number(response.stats.pending) || 0,
-          reviewed: Number(response.stats.reviewed) || 0,
-          accepted: Number(response.stats.accepted) || 0,
-          rejected: Number(response.stats.rejected) || 0,
-        });
-      } else {
-        // Fallback for a backend that has not been updated yet.
-        const paginationTotal = response.pagination?.totalCount;
-        setStats({
-          ...EMPTY_STATS,
-          total:
-            typeof paginationTotal === "number"
-              ? paginationTotal
-              : (response.applications || []).length,
-        });
-      }
+      const apps = response.applications || [];
+      setApplications(apps);
+      setStats(parseStats(response.stats, apps));
     } catch (err) {
       if (err.status === 401) {
         navigate("/login", {
@@ -93,7 +121,7 @@ export default function Dashboard() {
         return;
       }
 
-      setError(err.message || "Unable to load your dashboard.");
+      setError("Unable to load dashboard data. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -116,196 +144,247 @@ export default function Dashboard() {
   if (authLoading || (loading && isAuthenticated)) {
     return (
       <main className="dashboard-page">
-        <div className="dashboard-message">
-          <div className="dashboard-spinner" />
-          <p>Loading your dashboard...</p>
+        <div className="dashboard-container">
+          <LoadingSpinner message="Loading your dashboard..." fullHeight />
         </div>
       </main>
     );
   }
 
-  const displayName =
-    user?.fullName ||
+  const candidateName =
     user?.name ||
-    user?.username ||
+    user?.fullName ||
     user?.email?.split("@")[0] ||
     "Candidate";
 
   return (
     <main className="dashboard-page">
       <div className="dashboard-container">
+        {/* WELCOME SECTION */}
         <section className="dashboard-welcome">
-          <div>
-            <p className="dashboard-eyebrow">CANDIDATE PORTAL</p>
-            <h1>Welcome back, {displayName}!</h1>
+          <div className="welcome-text">
+            <p className="dashboard-eyebrow">CANDIDATE DASHBOARD</p>
+            <h1>Welcome back, {candidateName}</h1>
             <p>
-              Keep track of your applications and take the next step
-              in your career.
+              Track your internship applications, view real-time status updates,
+              and explore new career opportunities.
             </p>
           </div>
 
-          <Link to="/jobs" className="dashboard-primary-button">
-            Explore jobs <span aria-hidden="true">→</span>
-          </Link>
+          <div className="welcome-actions">
+            <Link to="/jobs" className="app-primary-button">
+              Explore Internships <span aria-hidden="true">→</span>
+            </Link>
+          </div>
         </section>
 
+        {/* ERROR STATE WITH RETRY */}
         {error && (
-          <section className="dashboard-error" role="alert">
-            <div>
-              <strong>Unable to load your latest data</strong>
-              <p>{error}</p>
-            </div>
-            <button
-              type="button"
-              onClick={fetchDashboard}
-              className="dashboard-retry-button"
-            >
-              Try again
-            </button>
-          </section>
+          <ErrorMessage
+            title="Dashboard Error"
+            message={error}
+            onRetry={fetchDashboard}
+            retryLabel="Retry"
+          />
         )}
 
-        <section className="dashboard-stats" aria-label="Application statistics">
-          <article className="dashboard-stat-card stat-total">
-            <span className="stat-icon" aria-hidden="true">▤</span>
-            <p>Total applications</p>
-            <strong>{stats.total}</strong>
-            <span className="stat-caption">All your submissions</span>
-          </article>
+        {/* FIVE APPLICATION STATISTICS CARDS */}
+        <section
+          className="dashboard-stats"
+          aria-label="Application statistics overview"
+        >
+          <DashboardStatCard
+            title="Total Applications"
+            count={stats.total}
+            caption="All submitted applications"
+            icon="▤"
+            variant="total"
+          />
 
-          <article className="dashboard-stat-card stat-pending">
-            <span className="stat-icon" aria-hidden="true">◷</span>
-            <p>Pending</p>
-            <strong>{stats.pending}</strong>
-            <span className="stat-caption">Awaiting review</span>
-          </article>
+          <DashboardStatCard
+            title="Pending"
+            count={stats.pending}
+            caption="Awaiting review"
+            icon="◷"
+            variant="pending"
+          />
 
-          <article className="dashboard-stat-card stat-accepted">
-            <span className="stat-icon" aria-hidden="true">✓</span>
-            <p>Accepted</p>
-            <strong>{stats.accepted}</strong>
-            <span className="stat-caption">Positive outcomes</span>
-          </article>
+          <DashboardStatCard
+            title="Shortlisted"
+            count={stats.shortlisted}
+            caption="Advanced to next stage"
+            icon="★"
+            variant="shortlisted"
+          />
 
-          <article className="dashboard-stat-card stat-reviewed">
-            <span className="stat-icon" aria-hidden="true">◉</span>
-            <p>Reviewed</p>
-            <strong>{stats.reviewed}</strong>
-            <span className="stat-caption">Reviewed by employers</span>
-          </article>
+          <DashboardStatCard
+            title="Selected"
+            count={stats.selected}
+            caption="Offers & acceptances"
+            icon="✓"
+            variant="selected"
+          />
 
-          <article className="dashboard-stat-card stat-rejected">
-            <span className="stat-icon" aria-hidden="true">↗</span>
-            <p>Rejected</p>
-            <strong>{stats.rejected}</strong>
-            <span className="stat-caption">Other opportunities await</span>
-          </article>
+          <DashboardStatCard
+            title="Rejected"
+            count={stats.rejected}
+            caption="Not moving forward"
+            icon="✕"
+            variant="rejected"
+          />
         </section>
 
+        {/* RECENT APPLICATIONS PANEL */}
         <section className="dashboard-panel">
           <div className="dashboard-panel-heading">
             <div>
               <p className="dashboard-eyebrow">YOUR PROGRESS</p>
-              <h2>Recent applications</h2>
-              <p>Here are your five most recent submissions.</p>
+              <h2>Recent Applications</h2>
+              <p>Here are your most recent internship applications.</p>
             </div>
 
-            <Link
-              to="/my-applications"
-              className="dashboard-text-link"
-            >
-              View all <span aria-hidden="true">→</span>
+            <Link to="/my-applications" className="dashboard-text-link">
+              View All Applications <span aria-hidden="true">→</span>
             </Link>
           </div>
 
-          {error && applications.length === 0 ? (
-            <div className="dashboard-empty">
-              <p>Your application list could not be loaded.</p>
-              <button
-                type="button"
-                onClick={fetchDashboard}
-                className="dashboard-secondary-button"
-              >
-                Reload applications
-              </button>
-            </div>
-          ) : applications.length === 0 ? (
-            <div className="dashboard-empty">
-              <div className="dashboard-empty-icon" aria-hidden="true">
-                ♧
-              </div>
-              <h3>Your journey starts here</h3>
-              <p>
-                You haven't submitted any applications yet. Explore
-                opportunities and apply for a role that matches your skills.
-              </p>
-              <Link to="/jobs" className="dashboard-primary-button">
-                Find your first opportunity
-              </Link>
-            </div>
+          {applications.length === 0 ? (
+            <EmptyState
+              icon="💼"
+              title="No applications submitted yet"
+              message="You haven't submitted any internship applications yet. Explore our open positions and start applying today!"
+              actionText="Browse Jobs →"
+              actionLink="/jobs"
+            />
           ) : (
-            <div className="dashboard-table-wrapper">
-              <table className="dashboard-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Position</th>
-                    <th scope="col">Company</th>
-                    <th scope="col">Applied on</th>
-                    <th scope="col">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {applications.map((application) => {
-                    const id = application._id || application.id;
-                    const status = application.status || "Pending";
+            <>
+              {/* DESKTOP & TABLET TABLE */}
+              <div className="dashboard-table-wrapper">
+                <table className="dashboard-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Job</th>
+                      <th scope="col">Company</th>
+                      <th scope="col">Applied</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {applications.map((app) => {
+                      const id = app._id || app.id;
+                      const jobTitle =
+                        app.jobTitle || app.job?.title || "Untitled Internship";
+                      const company =
+                        app.company || app.job?.company || "Company";
 
-                    return (
-                      <tr key={id}>
-                        <td>
-                          <strong>
-                            {application.jobTitle ||
-                              application.job?.title ||
-                              "Untitled position"}
-                          </strong>
-                        </td>
-                        <td>
-                          {application.company ||
-                            application.job?.company ||
-                            "Company unavailable"}
-                        </td>
-                        <td>{formatDate(application.createdAt)}</td>
-                        <td>
-                          <span
-                            className={`dashboard-status ${
-                              STATUS_STYLES[status] || "status-pending"
-                            }`}
-                          >
-                            {status}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                      return (
+                        <tr key={id}>
+                          <td className="col-job">
+                            <strong className="table-job-title">{jobTitle}</strong>
+                            {app.category && (
+                              <span className="table-job-cat">
+                                {app.category}
+                              </span>
+                            )}
+                          </td>
+                          <td className="col-company">
+                            <span>{company}</span>
+                            {app.location && (
+                              <small className="table-job-loc">
+                                📍 {app.location}
+                              </small>
+                            )}
+                          </td>
+                          <td className="col-date">
+                            {formatDate(app.createdAt)}
+                          </td>
+                          <td className="col-status">
+                            <StatusBadge status={app.status} />
+                          </td>
+                          <td className="col-action">
+                            <button
+                              type="button"
+                              className="table-action-button"
+                              onClick={() => setSelectedApp(app)}
+                              aria-label={`View details for ${jobTitle} at ${company}`}
+                            >
+                              View Details
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* MOBILE CARDS VIEW */}
+              <div className="dashboard-mobile-cards">
+                {applications.map((app) => {
+                  const id = app._id || app.id;
+                  const jobTitle =
+                    app.jobTitle || app.job?.title || "Untitled Internship";
+                  const company =
+                    app.company || app.job?.company || "Company";
+
+                  return (
+                    <div key={`m-${id}`} className="dashboard-app-card">
+                      <div className="app-card-top">
+                        <div>
+                          <strong className="mobile-job-title">{jobTitle}</strong>
+                          <p className="mobile-company">{company}</p>
+                        </div>
+                        <StatusBadge status={app.status} />
+                      </div>
+
+                      <div className="app-card-details">
+                        {app.location && <span>📍 {app.location}</span>}
+                        <span>📅 Applied {formatDate(app.createdAt)}</span>
+                      </div>
+
+                      <div className="app-card-actions">
+                        <button
+                          type="button"
+                          className="table-action-button full-width"
+                          onClick={() => setSelectedApp(app)}
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </section>
 
+        {/* CANDIDATE QUICK TIPS */}
         <section className="dashboard-tip">
-          <span className="dashboard-tip-icon" aria-hidden="true">✦</span>
+          <span className="dashboard-tip-icon" aria-hidden="true">
+            💡
+          </span>
           <div>
-            <h3>Keep moving forward</h3>
+            <h3>Candidate Success Tip</h3>
             <p>
-              Continue exploring relevant internships, keep your profile
-              up to date, and check your application statuses regularly.
+              Keep your profile updated with recent skills and customize your
+              cover letter for each internship to increase your shortlist chances.
             </p>
           </div>
-          <Link to="/profile" className="dashboard-text-link">
-            Update profile →
+          <Link to="/profile" className="app-secondary-button">
+            Update Profile →
           </Link>
         </section>
       </div>
+
+      {/* VIEW DETAILS MODAL */}
+      {selectedApp && (
+        <ApplicationModal
+          application={selectedApp}
+          onClose={() => setSelectedApp(null)}
+        />
+      )}
     </main>
   );
 }
