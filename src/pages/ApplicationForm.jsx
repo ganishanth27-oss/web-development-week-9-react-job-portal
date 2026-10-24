@@ -1,8 +1,9 @@
 
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { submitApplication } from "../api";
+import { submitApplication } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { useApp } from "../context/AppContext";
 
 const MAX_RESUME_SIZE = 5 * 1024 * 1024;
 
@@ -10,6 +11,7 @@ export default function ApplicationForm() {
   const { state } = useLocation();
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
+  const { addToast, addNotification } = useApp();
   const job = state?.job;
 
   const [fullName, setFullName] = useState(user?.name || "");
@@ -139,6 +141,19 @@ export default function ApplicationForm() {
       if (result?.application?.status) {
         setSavedStatus(result.application.status);
       }
+
+      addToast({
+        message: `Application submitted for "${job.title}"!`,
+        type: "success",
+      });
+
+      addNotification({
+        title: "Application Submitted",
+        message: `You applied for ${job.title} at ${job.company}. Status: ${
+          result?.application?.status || "Applied"
+        }.`,
+        type: "success",
+      });
     } catch (err) {
       const message = err?.message || "";
 

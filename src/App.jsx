@@ -13,6 +13,7 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 
+import { lazy, Suspense } from "react";
 import Auth from "./pages/Auth";
 import ApplicationForm from "./pages/ApplicationForm";
 import Jobs from "./pages/Jobs";
@@ -20,8 +21,18 @@ import MyApplications from "./pages/MyApplications";
 import Profile from "./pages/Profile";
 import JobDetails from "./pages/JobDetails";
 import Dashboard from "./pages/Dashboard";
+import ToastContainer from "./components/ToastContainer";
+import SkeletonLoader from "./components/SkeletonLoader";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { AppProvider } from "./context/AppContext";
+
+// Lazy-loaded role dashboards for performance optimization (Task 13)
+const CandidateDashboard = lazy(() => import("./pages/CandidateDashboard"));
+const RecruiterDashboard = lazy(() => import("./pages/RecruiterDashboard"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
 
 import logo from "./assets/dg-logo.png";
 import "./App.css";
@@ -302,54 +313,70 @@ function AppRoutes() {
       <Navbar />
 
       <main>
-        <Routes>
-          {/* Public pages */}
-          <Route path="/" element={<Home />} />
-          <Route path="/jobs" element={<Jobs />} />
-          <Route path="/jobs/:id" element={<JobDetails />} />
-          <Route path="/contact" element={<Contact />} />
+        <Suspense
+          fallback={
+            <div style={{ padding: "3rem 1rem", maxWidth: "900px", margin: "0 auto" }}>
+              <SkeletonLoader count={4} height="60px" />
+            </div>
+          }
+        >
+          <Routes>
+            {/* Public pages */}
+            <Route path="/" element={<Home />} />
+            <Route path="/jobs" element={<Jobs />} />
+            <Route path="/jobs/:id" element={<JobDetails />} />
+            <Route path="/contact" element={<Contact />} />
 
-          {/* Login and registration */}
-          <Route element={<PublicOnlyRoute />}>
-            <Route path="/login" element={<LoginPage />} />
-          </Route>
+            {/* Login and registration */}
+            <Route element={<PublicOnlyRoute />}>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<Register />} />
+            </Route>
 
-          {/* Protected candidate pages */}
-          <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<Dashboard />} />
+            {/* Protected candidate routes */}
+            <Route element={<ProtectedRoute allowedRoles={["candidate", "user"]} />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/my-applications" element={<MyApplications />} />
+              <Route path="/applications" element={<MyApplications />} />
+              <Route path="/apply" element={<ApplicationForm />} />
+            </Route>
 
+            {/* Protected recruiter routes */}
+            <Route element={<ProtectedRoute allowedRoles={["recruiter", "employer"]} />}>
+              <Route path="/recruiter" element={<RecruiterDashboard />} />
+              <Route path="/recruiter/dashboard" element={<RecruiterDashboard />} />
+            </Route>
+
+            {/* Protected admin routes */}
+            <Route element={<ProtectedRoute allowedRoles={["admin"]} />}>
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            </Route>
+
+            {/* Common protected profile */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/profile" element={<Profile />} />
+            </Route>
+
+            {/* Unknown URLs */}
             <Route
-              path="/my-applications"
-              element={<MyApplications />}
+              path="*"
+              element={
+                <section className="page-container">
+                  <h1>Page not found</h1>
+                  <p>
+                    The page you're looking for doesn't exist.
+                  </p>
+                  <Link to="/">Return Home</Link>
+                </section>
+              }
             />
-
-            <Route
-              path="/applications"
-              element={<MyApplications />}
-            />
-
-            <Route path="/profile" element={<Profile />} />
-
-            <Route path="/apply" element={<ApplicationForm />} />
-          </Route>
-
-          {/* Unknown URLs */}
-          <Route
-            path="*"
-            element={
-              <section className="page-container">
-                <h1>Page not found</h1>
-                <p>
-                  The page you're looking for doesn't exist.
-                </p>
-                <Link to="/">Return Home</Link>
-              </section>
-            }
-          />
-        </Routes>
+          </Routes>
+        </Suspense>
       </main>
 
       <Footer />
+      <ToastContainer />
     </>
   );
 }
@@ -360,11 +387,13 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </AuthProvider>
+    <AppProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </AuthProvider>
+    </AppProvider>
   );
 }
 

@@ -1,14 +1,19 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { getUserProfile, updateUserProfile, deleteUserProfile } from "../api";
+import { getUserProfile, updateUserProfile, deleteUserProfile } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { useApp } from "../context/AppContext";
 
 export default function Profile() {
   const { user, isAuthenticated, loading: authLoading, updateUser, logout } = useAuth();
+  const { addToast } = useApp();
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState(null);
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [skills, setSkills] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -34,6 +39,12 @@ export default function Profile() {
         if (res?.user) {
           setProfile(res.user);
           setName(res.user.name || "");
+          setPhone(res.user.phone || "");
+          setSkills(
+            Array.isArray(res.user.skills)
+              ? res.user.skills.join(", ")
+              : res.user.skills || ""
+          );
         }
       } catch (err) {
         if (err.status === 401) {
@@ -51,7 +62,7 @@ export default function Profile() {
     }
   }, [authLoading, isAuthenticated, navigate]);
 
-  // Handle profile name update (PUT /api/users/profile)
+  // Handle profile update
   const handleUpdate = async (e) => {
     e.preventDefault();
     setError("");
@@ -59,20 +70,32 @@ export default function Profile() {
     setUpdating(true);
 
     try {
-      const res = await updateUserProfile({ name: name.trim() });
+      const skillsArray = skills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const res = await updateUserProfile({
+        name: name.trim(),
+        phone: phone.trim(),
+        skills: skillsArray,
+      });
+
       if (res?.user) {
         setProfile(res.user);
         updateUser(res.user);
         setMessage(res.message || "Profile updated successfully!");
+        addToast({ message: "Profile updated successfully!", type: "success" });
       }
     } catch (err) {
       setError(err.message || "Failed to update profile.");
+      addToast({ message: err.message || "Failed to update profile.", type: "danger" });
     } finally {
       setUpdating(false);
     }
   };
 
-  // Handle account deletion (DELETE /api/users/profile)
+  // Handle account deletion
   const handleDeleteAccount = async (e) => {
     e.preventDefault();
     if (!deletePassword) {
@@ -85,7 +108,7 @@ export default function Profile() {
 
     try {
       await deleteUserProfile(deletePassword);
-      alert("Your account has been permanently deleted.");
+      addToast({ message: "Your account has been deleted.", type: "info" });
       await logout();
       navigate("/");
     } catch (err) {
@@ -125,16 +148,21 @@ export default function Profile() {
             <div>
               <p className="page-label">USER ACCOUNT</p>
               <h1>{profile?.name || "User Profile"}</h1>
-              <p className="profile-sub">{profile?.email} · Joined {joinDate}</p>
+              <p className="profile-sub">
+                {profile?.email} · Joined {joinDate} · Role:{" "}
+                <strong style={{ textTransform: "capitalize" }}>
+                  {profile?.role === "employer" ? "Recruiter" : profile?.role || "Candidate"}
+                </strong>
+              </p>
             </div>
           </div>
 
-          {message && <p className="auth-success">{message}</p>}
-          {error && <p className="auth-error">{error}</p>}
+          {message && <p className="auth-success">✅ {message}</p>}
+          {error && <p className="auth-error">⚠️ {error}</p>}
 
           <form onSubmit={handleUpdate} className="profile-form">
             <div className="form-group">
-              <label htmlFor="profile-name">Full Name</label>
+              <label htmlFor="profile-name">Full Name *</label>
               <input
                 id="profile-name"
                 type="text"
@@ -143,6 +171,33 @@ export default function Profile() {
                 placeholder="Enter your full name"
                 required
               />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="profile-phone">Phone Number</label>
+              <input
+                id="profile-phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 9876543210"
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="profile-skills">
+                Key Skills (used for Transparent AI Job Recommendation matching)
+              </label>
+              <input
+                id="profile-skills"
+                type="text"
+                value={skills}
+                onChange={(e) => setSkills(e.target.value)}
+                placeholder="e.g. React, Node.js, Python, MongoDB, Express"
+              />
+              <small style={{ color: "var(--color-text-muted, #94a3b8)", fontSize: "0.8rem", marginTop: "0.25rem", display: "block" }}>
+                Add your technical skills separated by commas to power the job match percentage.
+              </small>
             </div>
 
             <div className="form-group">
@@ -157,23 +212,8 @@ export default function Profile() {
               <small>Email address is associated with your account identity and cannot be changed.</small>
             </div>
 
-            <div className="form-group">
-              <label htmlFor="profile-role">Account Role</label>
-              <input
-                id="profile-role"
-                type="text"
-                value={profile?.role || "user"}
-                disabled
-                className="disabled-input"
-              />
-            </div>
-
             <div className="profile-actions-row">
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={updating}
-              >
+              <button type="submit" className="primary-button" disabled={updating}>
                 {updating ? "Saving Changes..." : "Save Changes"}
               </button>
 

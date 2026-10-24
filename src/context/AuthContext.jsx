@@ -1,5 +1,13 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { getMe, getToken, setToken, removeToken, getStoredUser, setStoredUser, logoutUser as apiLogout } from "../api";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import {
+  getMe,
+  getToken,
+  setToken,
+  removeToken,
+  getStoredUser,
+  setStoredUser,
+  logoutUser as apiLogout,
+} from "../services/api";
 
 const AuthContext = createContext(null);
 
@@ -39,16 +47,28 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     verifySession();
+
+    // Listen for unauthorized events emitted by apiClient interceptor
+    const handleUnauthorized = () => {
+      removeToken();
+      setUser(null);
+      setTokenState(null);
+    };
+
+    window.addEventListener("auth:unauthorized", handleUnauthorized);
+    return () => {
+      window.removeEventListener("auth:unauthorized", handleUnauthorized);
+    };
   }, [verifySession]);
 
-  const login = (newUser, newToken) => {
+  const login = useCallback((newUser, newToken) => {
     setToken(newToken);
     setStoredUser(newUser);
     setTokenState(newToken);
     setUser(newUser);
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await apiLogout();
     } catch {
@@ -58,30 +78,42 @@ export function AuthProvider({ children }) {
       setTokenState(null);
       setUser(null);
     }
-  };
+  }, []);
 
-  const updateUser = (updatedUser) => {
-    const merged = { ...user, ...updatedUser };
-    setUser(merged);
-    setStoredUser(merged);
-  };
+  const updateUser = useCallback((updatedUser) => {
+    setUser((prev) => {
+      const merged = { ...prev, ...updatedUser };
+      setStoredUser(merged);
+      return merged;
+    });
+  }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isAuthenticated: Boolean(token && user),
-        loading,
-        login,
-        logout,
-        updateUser,
-        refreshSession: verifySession,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const userRole = useMemo(() => {
+    if (!user?.role) return "guest";
+    if (user.role === "admin") return "admin";
+    if (user.role === "employer") return "recruiter";
+    return "candidate";
+  }, [user?.role]);
+
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      isAuthenticated: Boolean(token && user),
+      role: userRole,
+      isCandidate: userRole === "candidate",
+      isRecruiter: userRole === "recruiter",
+      isAdmin: userRole === "admin",
+      loading,
+      login,
+      logout,
+      updateUser,
+      refreshSession: verifySession,
+    }),
+    [user, token, userRole, loading, login, logout, updateUser, verifySession]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
@@ -91,3 +123,5 @@ export function useAuth() {
   }
   return context;
 }
+
+export default AuthContext;

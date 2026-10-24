@@ -1,12 +1,30 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import JobCard from "../components/JobCard";
-import { getJobs } from "../api";
+import JobFilter from "../components/JobFilter";
+import Pagination from "../components/Pagination";
+import SkeletonLoader from "../components/SkeletonLoader";
+import ErrorMessage from "../components/ErrorMessage";
+import EmptyState from "../components/EmptyState";
+import { getJobs } from "../services/api";
+import useDebounce from "../hooks/useDebounce";
 
 function Jobs() {
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 400);
+
   const [selectedType, setSelectedType] = useState("All");
   const [locationFilter, setLocationFilter] = useState("");
+  const debouncedLocation = useDebounce(locationFilter, 400);
+
   const [skillFilter, setSkillFilter] = useState("");
+  const debouncedSkill = useDebounce(skillFilter, 400);
+
+  const [companyFilter, setCompanyFilter] = useState("");
+  const debouncedCompany = useDebounce(companyFilter, 400);
+
+  const [minSalary, setMinSalary] = useState("");
+  const debouncedMinSalary = useDebounce(minSalary, 400);
+
   const [sortOption, setSortOption] = useState("newest");
   const [currentPage, setCurrentPage] = useState(1);
   const [limit] = useState(6);
@@ -23,24 +41,19 @@ function Jobs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const jobTypes = ["All", "Internship", "Full-time", "Part-time", "Remote", "Contract"];
-  const sortOptions = [
-    { label: "Newest First", value: "newest" },
-    { label: "Oldest First", value: "oldest" },
-    { label: "Deadline Soonest", value: "deadline" },
-  ];
-
-  // Fetch jobs whenever query parameters change
+  // Fetch jobs whenever debounced query parameters change
   const fetchJobsList = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
       const params = {
-        search: search.trim() || undefined,
+        search: debouncedSearch.trim() || undefined,
         type: selectedType !== "All" ? selectedType : undefined,
-        location: locationFilter.trim() || undefined,
-        skill: skillFilter.trim() || undefined,
+        location: debouncedLocation.trim() || undefined,
+        skill: debouncedSkill.trim() || undefined,
+        company: debouncedCompany.trim() || undefined,
+        minSalary: debouncedMinSalary.trim() || undefined,
         sort: sortOption,
         page: currentPage,
         limit,
@@ -57,20 +70,32 @@ function Jobs() {
         setJobs([]);
       }
     } catch (err) {
-      setError("Unable to load jobs. Please try again.");
+      setError(
+        err.message || "Unable to load opportunities. Please check your connection and try again."
+      );
       setJobs([]);
     } finally {
       setLoading(false);
     }
-  }, [search, selectedType, locationFilter, skillFilter, sortOption, currentPage, limit]);
+  }, [
+    debouncedSearch,
+    selectedType,
+    debouncedLocation,
+    debouncedSkill,
+    debouncedCompany,
+    debouncedMinSalary,
+    sortOption,
+    currentPage,
+    limit,
+  ]);
 
   useEffect(() => {
     fetchJobsList();
   }, [fetchJobsList]);
 
-  // Reset page to 1 when filters or search change
-  const handleSearchChange = (e) => {
-    setSearch(e.target.value);
+  // Reset page to 1 whenever filters change
+  const handleSearchChange = (val) => {
+    setSearch(val);
     setCurrentPage(1);
   };
 
@@ -79,18 +104,28 @@ function Jobs() {
     setCurrentPage(1);
   };
 
-  const handleLocationChange = (e) => {
-    setLocationFilter(e.target.value);
+  const handleLocationChange = (val) => {
+    setLocationFilter(val);
     setCurrentPage(1);
   };
 
-  const handleSkillChange = (e) => {
-    setSkillFilter(e.target.value);
+  const handleSkillChange = (val) => {
+    setSkillFilter(val);
     setCurrentPage(1);
   };
 
-  const handleSortChange = (e) => {
-    setSortOption(e.target.value);
+  const handleCompanyChange = (val) => {
+    setCompanyFilter(val);
+    setCurrentPage(1);
+  };
+
+  const handleMinSalaryChange = (val) => {
+    setMinSalary(val);
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (val) => {
+    setSortOption(val);
     setCurrentPage(1);
   };
 
@@ -99,8 +134,25 @@ function Jobs() {
     setSelectedType("All");
     setLocationFilter("");
     setSkillFilter("");
+    setCompanyFilter("");
+    setMinSalary("");
     setSortOption("newest");
     setCurrentPage(1);
+  };
+
+  // Helper for job icons
+  const getJobIcon = (title = "") => {
+    const t = title.toLowerCase();
+    if (t.includes("python")) return "🐍";
+    if (t.includes("java")) return "☕";
+    if (t.includes("design") || t.includes("ui") || t.includes("ux")) return "🎨";
+    if (t.includes("ai") || t.includes("machine") || t.includes("learning")) return "🤖";
+    if (t.includes("data") || t.includes("analyst")) return "📊";
+    if (t.includes("cloud") || t.includes("devops")) return "☁️";
+    if (t.includes("mobile") || t.includes("android") || t.includes("ios")) return "📱";
+    if (t.includes("react") || t.includes("frontend")) return "⚛️";
+    if (t.includes("node") || t.includes("backend")) return "⚙️";
+    return "💼";
   };
 
   return (
@@ -110,137 +162,71 @@ function Jobs() {
         <p className="page-label">CAREER OPPORTUNITIES</p>
         <h1>Explore Jobs &amp; Internships</h1>
         <p>
-          Find opportunities that match your skills,
-          interests and career goals.
+          Find vetted opportunities matching your skill set, interests, and career trajectory.
         </p>
       </section>
 
       {/* JOB SECTION */}
       <section className="jobs-section">
-        {/* SEARCH AND CONTROLS */}
-        <div className="jobs-controls">
-          <div className="search-box">
-            <span>🔍</span>
-            <input
-              type="text"
-              placeholder="Search title, company, skills, or location..."
-              value={search}
-              onChange={handleSearchChange}
-              aria-label="Search internships"
-            />
-          </div>
+        {/* ADVANCED FILTER COMPONENT */}
+        <JobFilter
+          search={search}
+          onSearchChange={handleSearchChange}
+          selectedType={selectedType}
+          onTypeChange={handleTypeChange}
+          locationFilter={locationFilter}
+          onLocationChange={handleLocationChange}
+          skillFilter={skillFilter}
+          onSkillChange={handleSkillChange}
+          companyFilter={companyFilter}
+          onCompanyChange={handleCompanyChange}
+          minSalary={minSalary}
+          onMinSalaryChange={handleMinSalaryChange}
+          sortOption={sortOption}
+          onSortChange={handleSortChange}
+          onResetFilters={handleResetFilters}
+        />
 
-          <div className="category-buttons">
-            {jobTypes.map((type) => (
-              <button
-                key={type}
-                type="button"
-                className={selectedType === type ? "category-btn active" : "category-btn"}
-                onClick={() => handleTypeChange(type)}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-
-          {/* COMBINED FILTERS ROW: Location, Skill, Sort */}
-          <div className="advanced-filters-row">
-            <div className="filter-input-group">
-              <span className="filter-icon">📍</span>
-              <input
-                type="text"
-                placeholder="Filter by location (e.g. Remote, Bangalore)"
-                value={locationFilter}
-                onChange={handleLocationChange}
-                aria-label="Filter by location"
-              />
-            </div>
-
-            <div className="filter-input-group">
-              <span className="filter-icon">⚡</span>
-              <input
-                type="text"
-                placeholder="Filter by skill (e.g. React, Node, Python)"
-                value={skillFilter}
-                onChange={handleSkillChange}
-                aria-label="Filter by skill"
-              />
-            </div>
-
-            <div className="filter-select-group">
-              <label htmlFor="job-sort-select">Sort by:</label>
-              <select
-                id="job-sort-select"
-                value={sortOption}
-                onChange={handleSortChange}
-              >
-                {sortOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {(search || selectedType !== "All" || locationFilter || skillFilter) && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="reset-filters-btn"
-                title="Reset all filters"
-              >
-                Clear Filters ✕
-              </button>
+        {/* JOB COUNT & STATUS */}
+        <div
+          className="job-count"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "1.5rem",
+          }}
+        >
+          <div>
+            Showing <strong>{jobs.length}</strong> of{" "}
+            <strong>{pagination.totalCount || jobs.length}</strong> opportunities
+            {pagination.totalPages > 1 && (
+              <span> (Page {pagination.currentPage} of {pagination.totalPages})</span>
             )}
           </div>
         </div>
 
-        {/* JOB COUNT & STATUS */}
-        <div className="job-count">
-          Showing <strong>{jobs.length}</strong> of{" "}
-          <strong>{pagination.totalCount || jobs.length}</strong> opportunities
-          {pagination.totalPages > 1 && (
-            <span> (Page {pagination.currentPage} of {pagination.totalPages})</span>
-          )}
-        </div>
-
-        {/* LOADING STATE */}
-        {loading && (
-          <div className="jobs-loading-state" role="status" aria-live="polite">
-            <div className="spinner" aria-hidden="true"></div>
-            <p>Loading jobs...</p>
-          </div>
-        )}
+        {/* LOADING STATE WITH SKELETON */}
+        {loading && <SkeletonLoader count={6} height="200px" />}
 
         {/* ERROR STATE */}
         {!loading && error && (
-          <div className="jobs-error-state" role="alert">
-            <p className="error-title">⚠️ Error</p>
-            <p className="error-message">{error}</p>
-            <button
-              type="button"
-              className="retry-button"
-              onClick={fetchJobsList}
-            >
-              Retry ↻
-            </button>
-          </div>
+          <ErrorMessage
+            title="Unable to Load Opportunities"
+            message={error}
+            onRetry={fetchJobsList}
+          />
         )}
 
         {/* EMPTY STATE */}
         {!loading && !error && jobs.length === 0 && (
-          <div className="no-jobs">
-            <div aria-hidden="true">🔍</div>
-            <h3>No jobs found.</h3>
-            <p>Try adjusting your search query, location, or filters to find opportunities.</p>
-            <button
-              type="button"
-              className="clear-filter-action-btn"
-              onClick={handleResetFilters}
-            >
-              Clear Filters
-            </button>
-          </div>
+          <EmptyState
+            icon="🔍"
+            title="No Matching Opportunities Found"
+            message="No jobs match your search criteria. Try removing some filters or searching with different keywords."
+            actionLabel="Reset All Filters"
+            onAction={handleResetFilters}
+          />
         )}
 
         {/* JOB CARDS */}
@@ -249,7 +235,7 @@ function Jobs() {
             <div className="jobs-grid">
               {jobs.map((job) => (
                 <JobCard
-                  key={job._id || job.id || job.title}
+                  key={job._id || job.id}
                   _id={job._id || job.id}
                   title={job.title}
                   company={job.company}
@@ -260,64 +246,20 @@ function Jobs() {
                   description={job.description}
                   salary={job.salary}
                   deadline={job.deadline}
-                  icon={
-                    job.title.toLowerCase().includes("python")
-                      ? "🐍"
-                      : job.title.toLowerCase().includes("java ") || job.title.toLowerCase().startsWith("java")
-                      ? "☕"
-                      : job.title.toLowerCase().includes("design") || job.title.toLowerCase().includes("ui")
-                      ? "🎨"
-                      : job.title.toLowerCase().includes("learning") || job.title.toLowerCase().includes("machine")
-                      ? "🤖"
-                      : job.title.toLowerCase().includes("data") || job.title.toLowerCase().includes("analyst")
-                      ? "📊"
-                      : job.title.toLowerCase().includes("devops") || job.title.toLowerCase().includes("cloud")
-                      ? "☁️"
-                      : job.title.toLowerCase().includes("mobile") || job.title.toLowerCase().includes("android") || job.title.toLowerCase().includes("ios")
-                      ? "📱"
-                      : job.title.toLowerCase().includes("backend")
-                      ? "⚙️"
-                      : "💻"
-                  }
+                  icon={getJobIcon(job.title)}
+                  showMatch={true}
                 />
               ))}
             </div>
 
-            {/* PAGINATION CONTROLS */}
-            {pagination.totalPages > 1 && (
-              <div className="pagination-bar">
-                <button
-                  type="button"
-                  className="page-nav-button"
-                  disabled={!pagination.hasPrevPage}
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                >
-                  ← Previous
-                </button>
-
-                <div className="page-numbers">
-                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      className={currentPage === num ? "page-num active" : "page-num"}
-                      onClick={() => setCurrentPage(num)}
-                    >
-                      {num}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  className="page-nav-button"
-                  disabled={!pagination.hasNextPage}
-                  onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
-                >
-                  Next →
-                </button>
-              </div>
-            )}
+            {/* PAGINATION COMPONENT */}
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalPages={pagination.totalPages}
+              onPageChange={(page) => setCurrentPage(page)}
+              hasNextPage={pagination.hasNextPage}
+              hasPrevPage={pagination.hasPrevPage}
+            />
           </>
         )}
       </section>
